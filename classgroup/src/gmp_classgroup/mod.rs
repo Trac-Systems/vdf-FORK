@@ -338,7 +338,10 @@ impl<B: Borrow<GmpClassGroup>> MulAssign<B> for GmpClassGroup {
 
 impl super::BigNum for Mpz {
     fn probab_prime(&self, iterations: u32) -> bool {
-        self.probab_prime(iterations.max(256) as _) != NotPrime
+        use num_bigint_dig::{prime::probably_prime, BigUint};
+        let bytes: Vec<u8> = self.into();
+        let n = BigUint::from_bytes_be(&bytes);
+        probably_prime(&n, iterations.max(20) as usize)
     }
 
     fn setbit(&mut self, bit_index: usize) {
@@ -584,4 +587,5 @@ mod test {
         s.normalize();
         assert_eq!(s, new);
     }
+
 }
