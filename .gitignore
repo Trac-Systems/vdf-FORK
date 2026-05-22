@@ -37,3 +37,4 @@ rls*.log
 
 # Rust output files
 target/
+.cargo/config.toml
