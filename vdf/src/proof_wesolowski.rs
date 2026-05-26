@@ -101,6 +101,10 @@ fn u64_to_bytes(q: u64) -> [u8; 8] {
     ]
 }
 
+fn u16_to_bytes(q: u16) -> [u8; 2] {
+    [(q >> 8) as u8, q as u8]
+}
+
 /// Quote:
 ///
 /// > Creates a random prime based on input s.
@@ -111,6 +115,7 @@ fn hash_prime<T: BigNum>(seed: &[&[u8]]) -> T {
         hasher.input(b"prime");
         hasher.input(u64_to_bytes(j));
         for i in seed {
+            hasher.input(u64_to_bytes(i.len() as u64));
             hasher.input(i);
         }
         let n = T::from(&hasher.fixed_result()[..16]);
@@ -203,43 +208,43 @@ where
 
 pub fn generate_proof<U, T: BigNumExt, V: ClassGroup<BigNum = T> + Eq + Hash>(
     x: &V,
+    challenge: &[u8],
     iterations: u64,
+    int_size_bits: u16,
     k: u8,
     l: usize,
     powers: &U,
-    int_size_bits: usize,
 ) -> V
 where
     U: for<'a> std::ops::Index<&'a u64, Output = V>,
 {
-    let element_len = 2 * ((int_size_bits + 16) >> 4);
-    let mut x_buf = vec![0; element_len];
-    x.serialize(&mut x_buf[..])
-        .expect(super::INCORRECT_BUFFER_SIZE);
+    let element_len = 2 * ((usize::from(int_size_bits) + 16) >> 4);
     let mut y_buf = vec![0; element_len];
     powers[&iterations]
         .serialize(&mut y_buf[..])
         .expect(super::INCORRECT_BUFFER_SIZE);
-    let b = hash_prime(&[&x_buf[..], &y_buf[..]]);
-    eval_optimized(&x, &b, iterations as _, k, l, powers)
+    let iteration_bytes = u64_to_bytes(iterations);
+    let size_bytes = u16_to_bytes(int_size_bits);
+    let b = hash_prime(&[challenge, &size_bytes, &iteration_bytes, &y_buf[..]]);
+    eval_optimized(x, &b, iterations as _, k, l, powers)
 }
 
 /// Verify a proof, according to the Wesolowski paper.
 pub fn verify_proof<T: BigNum, V: ClassGroup<BigNum = T>>(
+    challenge: &[u8],
     mut x: V,
     y: &V,
     mut proof: V,
     t: u64,
-    int_size_bits: usize,
+    int_size_bits: u16,
 ) -> Result<(), ()> {
-    let element_len = 2 * ((int_size_bits + 16) >> 4);
-    let mut x_buf = vec![0; element_len];
-    x.serialize(&mut x_buf[..])
-        .expect(super::INCORRECT_BUFFER_SIZE);
+    let element_len = 2 * ((usize::from(int_size_bits) + 16) >> 4);
     let mut y_buf = vec![0; element_len];
     y.serialize(&mut y_buf[..])
         .expect(super::INCORRECT_BUFFER_SIZE);
-    let b = hash_prime(&[&x_buf[..], &y_buf[..]]);
+    let iteration_bytes = u64_to_bytes(t);
+    let size_bytes = u16_to_bytes(int_size_bits);
+    let b = hash_prime(&[challenge, &size_bytes, &iteration_bytes, &y_buf[..]]);
     let mut r = T::from(0);
     r.mod_powm(&T::from(2u64), &T::from(t), &b);
     proof.pow(b);
@@ -273,7 +278,7 @@ where
             .chain(Some(iterations))
             .map(|x| x as _),
     );
-    let proof = generate_proof(&x, iterations as _, k, l, &powers, int_size_bits.into());
+    let proof = generate_proof(&x, challenge, iterations as _, int_size_bits, k, l, &powers);
     serialize(&[proof], &powers[&(iterations as _)], int_size_bits.into())
 }
 
@@ -299,5 +304,5 @@ where
     let proof = ClassGroup::from_bytes(proof_bytes, discriminant.clone());
     let y = ClassGroup::from_bytes(result_bytes, discriminant);
 
-    verify_proof(x, &y, proof, iterations, int_size_bits.into())
+    verify_proof(challenge, x, &y, proof, iterations, int_size_bits)
 }
