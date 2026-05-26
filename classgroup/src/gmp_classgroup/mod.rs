@@ -341,7 +341,7 @@ impl super::BigNum for Mpz {
         use num_bigint_dig::{prime::probably_prime, BigUint};
         let bytes: Vec<u8> = self.into();
         let n = BigUint::from_bytes_be(&bytes);
-        probably_prime(&n, iterations.max(20) as usize)
+        probably_prime(&n, iterations.max(64) as usize)
     }
 
     fn setbit(&mut self, bit_index: usize) {

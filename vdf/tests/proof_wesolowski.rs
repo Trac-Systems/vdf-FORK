@@ -50,9 +50,10 @@ fn solve_and_verify() {
 
 #[test]
 fn solve_and_verify_different_challenges() {
+    let fast_vdf = WesolowskiVDFParams(512).new();
     for challenge in &[b"aa" as &[u8], b"deadbeef", b"trac", b"\x00\x01\x02"] {
-        let proof = vdf().solve(challenge, 50).unwrap();
-        assert!(vdf().verify(challenge, 50, &proof).is_ok());
+        let proof = fast_vdf.solve(challenge, 50).unwrap();
+        assert!(fast_vdf.verify(challenge, 50, &proof).is_ok());
     }
 }
 
