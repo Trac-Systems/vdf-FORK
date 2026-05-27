@@ -125,3 +125,10 @@ fn proof_is_deterministic() {
     let proof_2 = vdf().solve(CHALLENGE, ITERATIONS).unwrap();
     assert_eq!(proof_1, proof_2);
 }
+
+#[test]
+fn wrong_discriminant_size_fails_verification() {
+    let small = WesolowskiVDFParams(512).new();
+    let proof = small.solve(CHALLENGE, ITERATIONS).unwrap();
+    assert!(vdf().verify(CHALLENGE, ITERATIONS, &proof).is_err());
+}
