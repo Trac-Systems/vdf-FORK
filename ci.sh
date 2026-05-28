@@ -1,5 +1,6 @@
 #!/bin/bash --
 # Copyright 2018 POA Networks Ltd.
+# Modifications copyright 2026 Trac Systems.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -49,11 +50,14 @@ test_output () {
 }
 
 for proof_type in wesolowski pietrzak; do
+   tmpfile=$(mktemp)
+   grep -E '^[a-f0-9]{64},[0-9]{2,4},[0-9a-f]+$' "$proof_type.csv" > "$tmpfile"
    while read challenge iterations correct_proof; do
       printf "Checking proof of type %q on input %d... " "$proof_type" "$((count += 1))"
       test_output "$correct_proof" ./target/release/vdf-cli "-t$proof_type" -- "$challenge" "$iterations"
       printf "Checking verification of input %d... " "$count"
       test_output 'Proof is valid' ./target/release/vdf-cli "-t$proof_type" -- "$challenge" "$iterations" "$correct_proof"
-   done < <(grep -E '^[a-f0-9]{64},[0-9]{2,4},[0-9a-f]+$' "$proof_type.csv")
+   done < "$tmpfile"
+   rm -f "$tmpfile"
 done
 "$k"

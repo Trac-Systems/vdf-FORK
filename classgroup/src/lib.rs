@@ -1,4 +1,5 @@
 // Copyright 2018 Chia Network Inc and POA Networks Ltd.
+// Modifications copyright 2026 Trac Systems.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,6 +47,7 @@ pub trait BigNum:
     fn probab_prime(&self, iterations: u32) -> bool;
     fn setbit(&mut self, offset: usize);
     fn mod_powm(&mut self, base: &Self, exponent: &Self, modulus: &Self);
+    fn to_bytes(&self) -> Vec<u8>;
 }
 
 pub trait BigNumExt: BigNum {
