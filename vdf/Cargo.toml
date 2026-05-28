@@ -36,3 +36,9 @@ hex = "0.3"
 name = "classgroup-bench"
 harness = false
 path = "bench/bench.rs"
+
+# Added by Trac Systems in 2026 to benchmark discriminant generation.
+[[bench]]
+name = "discriminant-generation"
+harness = false
+path = "bench/discriminant_generation.rs"
