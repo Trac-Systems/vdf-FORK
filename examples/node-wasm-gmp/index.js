@@ -36,20 +36,20 @@ function assertOk(module, code) {
   }
 }
 
-function solve(module, fn, challenge, difficulty, intSizeBits) {
+function solve(module, fn, challenge, difficulty, discriminantSizeBits) {
   const [lo, hi] = splitU64(difficulty);
   return withBytes(module, challenge, (challengePtr, challengeLen) => {
-    const code = fn(challengePtr, challengeLen, lo, hi, intSizeBits);
+    const code = fn(challengePtr, challengeLen, lo, hi, discriminantSizeBits);
     assertOk(module, code);
     return readLastResult(module);
   });
 }
 
-function verify(module, fn, challenge, difficulty, proof, intSizeBits) {
+function verify(module, fn, challenge, difficulty, proof, discriminantSizeBits) {
   const [lo, hi] = splitU64(difficulty);
   return withBytes(module, challenge, (challengePtr, challengeLen) =>
     withBytes(module, proof, (proofPtr, proofLen) => {
-      const code = fn(challengePtr, challengeLen, lo, hi, proofPtr, proofLen, intSizeBits);
+      const code = fn(challengePtr, challengeLen, lo, hi, proofPtr, proofLen, discriminantSizeBits);
       assertOk(module, code);
       return code === 1;
     }),
@@ -60,17 +60,17 @@ async function loadVdfGmp(options = {}) {
   const module = await createVdfGmpModule({ noInitialRun: true, ...options });
   return {
     module,
-    solveWesolowski(challenge, difficulty, intSizeBits) {
-      return solve(module, module._vdf_solve_wesolowski, challenge, difficulty, intSizeBits);
+    solveWesolowski(challenge, difficulty, discriminantSizeBits) {
+      return solve(module, module._vdf_solve_wesolowski, challenge, difficulty, discriminantSizeBits);
     },
-    verifyWesolowski(challenge, difficulty, proof, intSizeBits) {
+    verifyWesolowski(challenge, difficulty, proof, discriminantSizeBits) {
       return verify(
         module,
         module._vdf_verify_wesolowski,
         challenge,
         difficulty,
         proof,
-        intSizeBits,
+        discriminantSizeBits,
       );
     },
   };

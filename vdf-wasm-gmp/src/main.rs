@@ -37,7 +37,7 @@ fn difficulty(lo: u32, hi: u32) -> u64 {
 }
 
 fn checked_bits(bits: u32) -> Result<u16, i32> {
-    u16::try_from(bits).map_err(|_| set_error("int_size_bits exceeds u16::MAX"))
+    u16::try_from(bits).map_err(|_| set_error("discriminant_size_bits exceeds u16::MAX"))
 }
 
 unsafe fn read_input<'a>(ptr: *const u8, len: usize, name: &str) -> Result<&'a [u8], i32> {
@@ -106,14 +106,14 @@ pub unsafe extern "C" fn vdf_solve_wesolowski(
     challenge_len: usize,
     difficulty_lo: u32,
     difficulty_hi: u32,
-    int_size_bits: u32,
+    discriminant_size_bits: u32,
 ) -> i32 {
     clear_error();
     let challenge = match read_input(challenge_ptr, challenge_len, "challenge") {
         Ok(challenge) => challenge,
         Err(code) => return code,
     };
-    let bits = match checked_bits(int_size_bits) {
+    let bits = match checked_bits(discriminant_size_bits) {
         Ok(bits) => bits,
         Err(code) => return code,
     };
@@ -137,7 +137,7 @@ pub unsafe extern "C" fn vdf_verify_wesolowski(
     difficulty_hi: u32,
     proof_ptr: *const u8,
     proof_len: usize,
-    int_size_bits: u32,
+    discriminant_size_bits: u32,
 ) -> i32 {
     clear_error();
     let challenge = match read_input(challenge_ptr, challenge_len, "challenge") {
@@ -148,7 +148,7 @@ pub unsafe extern "C" fn vdf_verify_wesolowski(
         Ok(proof) => proof,
         Err(code) => return code,
     };
-    let bits = match checked_bits(int_size_bits) {
+    let bits = match checked_bits(discriminant_size_bits) {
         Ok(bits) => bits,
         Err(code) => return code,
     };
