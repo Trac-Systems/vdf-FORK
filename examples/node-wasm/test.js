@@ -1,14 +1,14 @@
-const { loadVdfGmp } = require('./index.js');
+const { loadVdfWasm } = require('./index.js');
 
 async function main() {
-  const vdf = await loadVdfGmp();
+  const vdf = await loadVdfWasm();
   const challenge = Buffer.from([0xaa]);
   const difficulty = 500n;
   const proof = vdf.solveWesolowski(challenge, difficulty, 40);
   if (!vdf.verifyWesolowski(challenge, difficulty, proof, 40)) {
     throw new Error('Wesolowski proof did not verify');
   }
-  console.log('gmp wesolowski ok', {
+  console.log('wasm wesolowski ok', {
     proofBytes: proof.length,
     proofHex: proof.toString('hex'),
   });

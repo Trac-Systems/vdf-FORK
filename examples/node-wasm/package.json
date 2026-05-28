@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "prepack": "npm run build",
-    "build": "make -C ../.. node-gmp-bindings",
+    "build": "make -C ../.. node-bindings",
     "test": "npm run build && node test.js",
     "bench": "npm run build && node bench.js"
   },

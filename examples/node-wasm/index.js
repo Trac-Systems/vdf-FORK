@@ -1,4 +1,4 @@
-const createVdfGmpModule = require('./pkg/vdf-wasm-gmp.js');
+const createVdfWasmModule = require('./pkg/vdf-wasm.js');
 
 function splitU64(value) {
   const n = BigInt(value);
@@ -56,8 +56,8 @@ function verify(module, fn, challenge, difficulty, proof, discriminantSizeBits) 
   );
 }
 
-async function loadVdfGmp(options = {}) {
-  const module = await createVdfGmpModule({ noInitialRun: true, ...options });
+async function loadVdfWasm(options = {}) {
+  const module = await createVdfWasmModule({ noInitialRun: true, ...options });
   return {
     module,
     solveWesolowski(challenge, difficulty, discriminantSizeBits) {
@@ -76,4 +76,4 @@ async function loadVdfGmp(options = {}) {
   };
 }
 
-module.exports = { loadVdfGmp };
+module.exports = { loadVdfWasm };

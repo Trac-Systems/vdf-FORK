@@ -1,4 +1,4 @@
-const { loadVdfGmp } = require('./index.js');
+const { loadVdfWasm } = require('./index.js');
 
 function timeMs(fn, repeats) {
   const start = process.hrtime.bigint();
@@ -11,7 +11,7 @@ function timeMs(fn, repeats) {
 }
 
 async function main() {
-  const vdf = await loadVdfGmp();
+  const vdf = await loadVdfWasm();
   const challenge = Buffer.from([0xaa]);
   const bits = Number(process.env.VDF_BITS || 256);
   const difficulty = BigInt(process.env.VDF_WESOLOWSKI_DIFFICULTY || 500);

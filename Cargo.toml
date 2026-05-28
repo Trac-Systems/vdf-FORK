@@ -17,7 +17,7 @@ members = [
     "vdf-cli",
     "classgroup",
     "vdf-competition",
-    "vdf-wasm-gmp",
+    "vdf-wasm",
 ]
 
 [profile.release]

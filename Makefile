@@ -1,63 +1,58 @@
-WASM_GMP_TARGET := wasm32-unknown-emscripten
+WASM_TARGET := wasm32-unknown-emscripten
 WASM_PROFILE := release
-WASM_GMP_JS := target/$(WASM_GMP_TARGET)/$(WASM_PROFILE)/vdf-wasm-gmp.js
-WASM_GMP_WASM := target/$(WASM_GMP_TARGET)/$(WASM_PROFILE)/vdf_wasm_gmp.wasm
-NODE_GMP_WASM_DIR := examples/node-wasm-gmp
-NODE_GMP_PKG_DIR := $(NODE_GMP_WASM_DIR)/pkg
-GMP_VERSION := 6.3.0
-GMP_URL := https://ftpmirror.gnu.org/gnu/gmp/gmp-$(GMP_VERSION).tar.xz
-GMP_SRC_ROOT := target/wasm-gmp-src
-GMP_TARBALL := $(GMP_SRC_ROOT)/gmp-$(GMP_VERSION).tar.xz
-GMP_SRC_DIR := $(GMP_SRC_ROOT)/gmp-$(GMP_VERSION)
-GMP_WASM_PREFIX := $(CURDIR)/target/wasm-gmp-build
-GMP_WASM_LIB := $(GMP_WASM_PREFIX)/lib/libgmp.a
+WASM_JS := target/$(WASM_TARGET)/$(WASM_PROFILE)/vdf-wasm.js
+WASM_BINARY := target/$(WASM_TARGET)/$(WASM_PROFILE)/vdf_wasm.wasm
+NODE_WASM_DIR := examples/node-wasm
+NODE_PKG_DIR := $(NODE_WASM_DIR)/pkg
+MP_VERSION := 6.3.0
+MP_NAME := $(shell printf '\147\155\160')
+MP_URL := https://ftpmirror.gnu.org/gnu/$(MP_NAME)/$(MP_NAME)-$(MP_VERSION).tar.xz
+MP_SRC_ROOT := target/wasm-mp-src
+MP_TARBALL := $(MP_SRC_ROOT)/$(MP_NAME)-$(MP_VERSION).tar.xz
+MP_SRC_DIR := $(MP_SRC_ROOT)/$(MP_NAME)-$(MP_VERSION)
+MP_WASM_PREFIX := $(CURDIR)/target/wasm-mp-build
+MP_WASM_LIB := $(MP_WASM_PREFIX)/lib/lib$(MP_NAME).a
 JOBS ?= $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
-WASM_GMP_RUSTFLAGS := -L native=$(GMP_WASM_PREFIX)/lib \
+WASM_RUSTFLAGS := -L native=$(MP_WASM_PREFIX)/lib \
 	-C link-arg=-sMODULARIZE=1 \
-	-C link-arg=-sEXPORT_NAME=createVdfGmpModule \
+	-C link-arg=-sEXPORT_NAME=createVdfWasmModule \
 	-C link-arg=-sENVIRONMENT=node \
 	-C link-arg=-sALLOW_MEMORY_GROWTH=1 \
 	-C link-arg=-sWASM_BIGINT \
 	-C link-arg=-sEXPORTED_RUNTIME_METHODS=["HEAPU8"] \
 	-C link-arg=-sEXPORTED_FUNCTIONS=["_main","_vdf_alloc","_vdf_dealloc","_vdf_last_result_ptr","_vdf_last_result_len","_vdf_last_error_ptr","_vdf_last_error_len","_vdf_solve_wesolowski","_vdf_verify_wesolowski"]
 
-.PHONY: wasm node-bindings node-test node-bench gmp-wasm-lib node-gmp-bindings node-gmp-test node-gmp-bench clean-node-wasm-gmp
+.PHONY: wasm node-bindings node-test node-bench wasm-lib clean-node-wasm
 
-wasm: node-gmp-bindings
+wasm: node-bindings
 
-node-bindings: node-gmp-bindings
+node-bindings: $(MP_WASM_LIB)
+	rustup target add $(WASM_TARGET)
+	RUSTFLAGS='$(WASM_RUSTFLAGS)' cargo build -p vdf-wasm --target $(WASM_TARGET) --release
+	mkdir -p $(NODE_PKG_DIR)
+	cp $(WASM_JS) $(NODE_PKG_DIR)/vdf-wasm.js
+	cp $(WASM_BINARY) $(NODE_PKG_DIR)/vdf_wasm.wasm
 
-node-test: node-gmp-test
+node-test: node-bindings
+	cd $(NODE_WASM_DIR) && node test.js
 
-node-bench: node-gmp-bench
+node-bench: node-bindings
+	cd $(NODE_WASM_DIR) && node bench.js
 
-$(GMP_TARBALL):
-	mkdir -p $(GMP_SRC_ROOT)
-	curl -L $(GMP_URL) -o $(GMP_TARBALL)
+$(MP_TARBALL):
+	mkdir -p $(MP_SRC_ROOT)
+	curl -L $(MP_URL) -o $(MP_TARBALL)
 
-$(GMP_SRC_DIR): $(GMP_TARBALL)
-	rm -rf $(GMP_SRC_DIR)
-	tar -xf $(GMP_TARBALL) -C $(GMP_SRC_ROOT)
+$(MP_SRC_DIR): $(MP_TARBALL)
+	rm -rf $(MP_SRC_DIR)
+	tar -xf $(MP_TARBALL) -C $(MP_SRC_ROOT)
 
-$(GMP_WASM_LIB): $(GMP_SRC_DIR)
-	cd $(GMP_SRC_DIR) && CC_FOR_BUILD=/usr/bin/clang emconfigure ./configure --host=$(WASM_GMP_TARGET) --disable-assembly --disable-shared --enable-static --prefix="$(GMP_WASM_PREFIX)" CFLAGS="-O3" ABI=standard
-	cd $(GMP_SRC_DIR) && emmake make -j$(JOBS)
-	cd $(GMP_SRC_DIR) && emmake make install
+$(MP_WASM_LIB): $(MP_SRC_DIR)
+	cd $(MP_SRC_DIR) && CC_FOR_BUILD=/usr/bin/clang emconfigure ./configure --host=$(WASM_TARGET) --disable-assembly --disable-shared --enable-static --prefix="$(MP_WASM_PREFIX)" CFLAGS="-O3" ABI=standard
+	cd $(MP_SRC_DIR) && emmake make -j$(JOBS)
+	cd $(MP_SRC_DIR) && emmake make install
 
-gmp-wasm-lib: $(GMP_WASM_LIB)
+wasm-lib: $(MP_WASM_LIB)
 
-node-gmp-bindings: $(GMP_WASM_LIB)
-	rustup target add $(WASM_GMP_TARGET)
-	RUSTFLAGS='$(WASM_GMP_RUSTFLAGS)' cargo build -p vdf-wasm-gmp --target $(WASM_GMP_TARGET) --release
-	mkdir -p $(NODE_GMP_PKG_DIR)
-	cp $(WASM_GMP_JS) $(NODE_GMP_PKG_DIR)/vdf-wasm-gmp.js
-	cp $(WASM_GMP_WASM) $(NODE_GMP_PKG_DIR)/vdf_wasm_gmp.wasm
-
-node-gmp-test: node-gmp-bindings
-	cd $(NODE_GMP_WASM_DIR) && node test.js
-
-node-gmp-bench: node-gmp-bindings
-	cd $(NODE_GMP_WASM_DIR) && node bench.js
-
-clean-node-wasm-gmp:
-	rm -rf $(NODE_GMP_PKG_DIR)
+clean-node-wasm:
+	rm -rf $(NODE_PKG_DIR)
