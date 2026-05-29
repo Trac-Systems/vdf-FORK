@@ -1,4 +1,5 @@
 // Copyright 2018 Chia Network Inc and POA Networks Ltd.
+// Modifications copyright 2026 Trac Systems.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -71,7 +72,7 @@ fn mod_exponentiation(base: usize, exponent: usize, modulus: usize) -> usize {
 
 macro_rules! const_fmt {
     () => {
-        "#[allow(warnings)]\nconst {}: [{}; {}] = {:#?};\n\n";
+        "#[allow(warnings)]\nconst {}: [{}; {}] = {:#?};\n\n"
     };
 }
 

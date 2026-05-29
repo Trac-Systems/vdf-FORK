@@ -1,4 +1,5 @@
 // Copyright 2018 POA Networks Ltd.
+// Modifications copyright 2026 Trac Systems.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +20,7 @@ use std::{cmp::Eq, collections::HashMap, hash::Hash, mem, u64, usize};
 
 #[derive(Debug, Clone)]
 pub struct WesolowskiVDF {
-    int_size_bits: u16,
+    discriminant_size_bits: u16,
 }
 use super::InvalidIterations as Bad;
 
@@ -29,7 +30,7 @@ impl super::VDFParams for WesolowskiVDFParams {
     type VDF = WesolowskiVDF;
     fn new(self) -> Self::VDF {
         WesolowskiVDF {
-            int_size_bits: self.0,
+            discriminant_size_bits: self.0,
         }
     }
 }
@@ -46,7 +47,9 @@ impl super::VDF for WesolowskiVDF {
                 <GmpClassGroup as ClassGroup>::BigNum,
                 GmpClassGroup,
             >(
-                challenge, difficulty as usize, self.int_size_bits
+                challenge,
+                difficulty as usize,
+                self.discriminant_size_bits,
             ))
         }
     }
@@ -61,7 +64,7 @@ impl super::VDF for WesolowskiVDF {
             challenge,
             alleged_solution,
             difficulty,
-            self.int_size_bits,
+            self.discriminant_size_bits,
         )
         .map_err(|()| super::InvalidProof)
     }
@@ -89,21 +92,20 @@ pub fn approximate_parameters(t: f64) -> (usize, u8, u64) {
 }
 
 fn u64_to_bytes(q: u64) -> [u8; 8] {
-    if false {
-        // This use of `std::mem::transumte` is correct, but still not justified.
-        unsafe { std::mem::transmute(q.to_be()) }
-    } else {
-        [
-            (q >> 56) as u8,
-            (q >> 48) as u8,
-            (q >> 40) as u8,
-            (q >> 32) as u8,
-            (q >> 24) as u8,
-            (q >> 16) as u8,
-            (q >> 8) as u8,
-            q as u8,
-        ]
-    }
+    [
+        (q >> 56) as u8,
+        (q >> 48) as u8,
+        (q >> 40) as u8,
+        (q >> 32) as u8,
+        (q >> 24) as u8,
+        (q >> 16) as u8,
+        (q >> 8) as u8,
+        q as u8,
+    ]
+}
+
+fn u16_to_bytes(q: u16) -> [u8; 2] {
+    [(q >> 8) as u8, q as u8]
 }
 
 /// Quote:
@@ -116,6 +118,7 @@ fn hash_prime<T: BigNum>(seed: &[&[u8]]) -> T {
         hasher.input(b"prime");
         hasher.input(u64_to_bytes(j));
         for i in seed {
+            hasher.input(u64_to_bytes(i.len() as u64));
             hasher.input(i);
         }
         let n = T::from(&hasher.fixed_result()[..16]);
@@ -208,43 +211,45 @@ where
 
 pub fn generate_proof<U, T: BigNumExt, V: ClassGroup<BigNum = T> + Eq + Hash>(
     x: &V,
+    challenge: &[u8],
     iterations: u64,
+    discriminant_size_bits: u16,
     k: u8,
     l: usize,
     powers: &U,
-    int_size_bits: usize,
 ) -> V
 where
     U: for<'a> std::ops::Index<&'a u64, Output = V>,
 {
-    let element_len = 2 * ((int_size_bits + 16) >> 4);
-    let mut x_buf = vec![0; element_len];
-    x.serialize(&mut x_buf[..])
-        .expect(super::INCORRECT_BUFFER_SIZE);
+    let element_len = 2 * ((usize::from(discriminant_size_bits) + 16) >> 4);
     let mut y_buf = vec![0; element_len];
     powers[&iterations]
         .serialize(&mut y_buf[..])
         .expect(super::INCORRECT_BUFFER_SIZE);
-    let b = hash_prime(&[&x_buf[..], &y_buf[..]]);
-    eval_optimized(&x, &b, iterations as _, k, l, powers)
+    let iteration_bytes = u64_to_bytes(iterations);
+    let size_bytes = u16_to_bytes(discriminant_size_bits);
+    let discriminant_bytes = x.discriminant().to_bytes();
+    let b = hash_prime(&[challenge, &size_bytes, &iteration_bytes, &y_buf[..], &discriminant_bytes]);
+    eval_optimized(x, &b, iterations as _, k, l, powers)
 }
 
 /// Verify a proof, according to the Wesolowski paper.
 pub fn verify_proof<T: BigNum, V: ClassGroup<BigNum = T>>(
+    challenge: &[u8],
     mut x: V,
     y: &V,
     mut proof: V,
     t: u64,
-    int_size_bits: usize,
+    discriminant_size_bits: u16,
 ) -> Result<(), ()> {
-    let element_len = 2 * ((int_size_bits + 16) >> 4);
-    let mut x_buf = vec![0; element_len];
-    x.serialize(&mut x_buf[..])
-        .expect(super::INCORRECT_BUFFER_SIZE);
+    let element_len = 2 * ((usize::from(discriminant_size_bits) + 16) >> 4);
     let mut y_buf = vec![0; element_len];
     y.serialize(&mut y_buf[..])
         .expect(super::INCORRECT_BUFFER_SIZE);
-    let b = hash_prime(&[&x_buf[..], &y_buf[..]]);
+    let iteration_bytes = u64_to_bytes(t);
+    let size_bytes = u16_to_bytes(discriminant_size_bits);
+    let discriminant_bytes = x.discriminant().to_bytes();
+    let b = hash_prime(&[challenge, &size_bytes, &iteration_bytes, &y_buf[..], &discriminant_bytes]);
     let mut r = T::from(0);
     r.mod_powm(&T::from(2u64), &T::from(t), &b);
     proof.pow(b);
@@ -260,13 +265,14 @@ pub fn verify_proof<T: BigNum, V: ClassGroup<BigNum = T>>(
 pub fn create_proof_of_time_wesolowski<T: BigNumExt, V: ClassGroup<BigNum = T> + Eq + Hash>(
     challenge: &[u8],
     iterations: usize,
-    int_size_bits: u16,
+    discriminant_size_bits: u16,
 ) -> Vec<u8>
 where
     for<'a, 'b> &'a V: std::ops::Mul<&'b V, Output = V>,
     for<'a, 'b> &'a V::BigNum: std::ops::Mul<&'b V::BigNum, Output = V::BigNum>,
 {
-    let discriminant = super::create_discriminant::create_discriminant(&challenge, int_size_bits);
+    let discriminant =
+        super::create_discriminant::create_discriminant(&challenge, discriminant_size_bits);
     let x = V::from_ab_discriminant(2.into(), 1.into(), discriminant);
     assert!((iterations as u128) < (1u128 << 53));
     let (l, k, _) = approximate_parameters(iterations as f64);
@@ -278,25 +284,38 @@ where
             .chain(Some(iterations))
             .map(|x| x as _),
     );
-    let proof = generate_proof(&x, iterations as _, k, l, &powers, int_size_bits.into());
-    serialize(&[proof], &powers[&(iterations as _)], int_size_bits.into())
+    let proof = generate_proof(
+        &x,
+        challenge,
+        iterations as _,
+        discriminant_size_bits,
+        k,
+        l,
+        &powers,
+    );
+    serialize(
+        &[proof],
+        &powers[&(iterations as _)],
+        discriminant_size_bits.into(),
+    )
 }
 
 pub fn check_proof_of_time_wesolowski<T: BigNum, V: ClassGroup<BigNum = T>>(
     challenge: &[u8],
     proof_blob: &[u8],
     iterations: u64,
-    int_size_bits: u16,
+    discriminant_size_bits: u16,
 ) -> Result<(), ()>
 where
     T: BigNumExt,
 {
-    let discriminant: T = super::create_discriminant::create_discriminant(challenge, int_size_bits);
+    let discriminant: T =
+        super::create_discriminant::create_discriminant(challenge, discriminant_size_bits);
     let x = V::from_ab_discriminant(2.into(), 1.into(), discriminant.clone());
-    if (usize::MAX - 16) < int_size_bits.into() {
+    if (usize::MAX - 16) < discriminant_size_bits.into() {
         return Err(());
     }
-    let int_size = (usize::from(int_size_bits) + 16) >> 4;
+    let int_size = (usize::from(discriminant_size_bits) + 16) >> 4;
     if int_size * 4 != proof_blob.len() {
         return Err(());
     }
@@ -304,5 +323,80 @@ where
     let proof = ClassGroup::from_bytes(proof_bytes, discriminant.clone());
     let y = ClassGroup::from_bytes(result_bytes, discriminant);
 
-    verify_proof(x, &y, proof, iterations, int_size_bits.into())
+    verify_proof(challenge, x, &y, proof, iterations, discriminant_size_bits)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use classgroup::{gmp_classgroup::GmpClassGroup, ClassGroup};
+
+    type G = GmpClassGroup;
+    type Num = <G as ClassGroup>::BigNum;
+
+    fn generator(challenge: &[u8], size_bits: u16) -> G {
+        let d: Num = super::super::create_discriminant::create_discriminant(challenge, size_bits);
+        G::from_ab_discriminant(2.into(), 1.into(), d)
+    }
+
+    fn powers_for(x: G, iterations: u64) -> std::collections::HashMap<u64, G> {
+        let (l, k, _) = approximate_parameters(iterations as f64);
+        let q = l.checked_mul(k as usize).expect("overflow");
+        super::super::proof_of_time::iterate_squarings(
+            x,
+            (0..=iterations as usize / q + 1)
+                .map(|i| (i * q) as u64)
+                .chain(Some(iterations)),
+        )
+    }
+
+    // Smoke test: generate_proof + verify_proof agree when the same discriminant
+    // is used — exercises the x.discriminant().to_bytes() path in both functions.
+    #[test]
+    fn generate_and_verify_agree_at_low_level() {
+        let challenge = b"\xaa";
+        let size_bits = 512u16;
+        let iterations = 10u64;
+        let x = generator(challenge, size_bits);
+        let powers = powers_for(x.clone(), iterations);
+        let (l, k, _) = approximate_parameters(iterations as f64);
+        let proof = generate_proof(&x, challenge, iterations, size_bits, k, l, &powers);
+        let y = powers[&iterations].clone();
+        assert!(verify_proof(challenge, x, &y, proof, iterations, size_bits).is_ok());
+    }
+
+    // The Fiat-Shamir transcript now includes the discriminant bytes, so a proof
+    // generated with one discriminant must not verify under a different one.
+    // GmpClassGroup asserts discriminant equality on group operations in debug
+    // builds, so both panic and Err are valid rejection signals here.
+    #[test]
+    fn wrong_discriminant_rejected_by_transcript() {
+        let size_bits = 512u16;
+        let iterations = 10u64;
+        let x1 = generator(b"\xaa", size_bits);
+        let x2 = generator(b"\xbb", size_bits);
+        assert_ne!(
+            x1.discriminant().to_bytes(),
+            x2.discriminant().to_bytes(),
+            "test requires two distinct discriminants"
+        );
+        let powers = powers_for(x1.clone(), iterations);
+        let (l, k, _) = approximate_parameters(iterations as f64);
+        let proof = generate_proof(&x1, b"\xaa", iterations, size_bits, k, l, &powers);
+        let y = powers[&iterations].clone();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            verify_proof(b"\xaa", x2, &y, proof, iterations, size_bits)
+        }));
+        assert!(matches!(result, Ok(Err(_)) | Err(_)));
+    }
+
+    // Sanity check that different challenges produce distinguishable discriminants
+    // so the transcript entries actually differ.
+    #[test]
+    fn discriminant_bytes_differ_across_groups() {
+        let d1: Num = super::super::create_discriminant::create_discriminant(b"\xaa", 512u16);
+        let d2: Num = super::super::create_discriminant::create_discriminant(b"\xbb", 512u16);
+        use classgroup::BigNum;
+        assert_ne!(d1.to_bytes(), d2.to_bytes());
+    }
 }

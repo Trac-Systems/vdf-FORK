@@ -1,4 +1,5 @@
 // Copyright 2018 Chia Network Inc and POA Networks Ltd.
+// Modifications copyright 2026 Trac Systems.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -338,7 +339,10 @@ impl<B: Borrow<GmpClassGroup>> MulAssign<B> for GmpClassGroup {
 
 impl super::BigNum for Mpz {
     fn probab_prime(&self, iterations: u32) -> bool {
-        self.probab_prime(iterations.max(256) as _) != NotPrime
+        use num_bigint_dig::{prime::probably_prime, BigUint};
+        let bytes: Vec<u8> = self.into();
+        let n = BigUint::from_bytes_be(&bytes);
+        probably_prime(&n, iterations.max(64) as usize)
     }
 
     fn setbit(&mut self, bit_index: usize) {
@@ -347,6 +351,10 @@ impl super::BigNum for Mpz {
 
     fn mod_powm(&mut self, base: &Self, exponent: &Self, modulus: &Self) {
         ffi::mpz_powm(self, base, exponent, modulus)
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        Vec::<u8>::from(self)
     }
 }
 
@@ -584,4 +592,27 @@ mod test {
         s.normalize();
         assert_eq!(s, new);
     }
+
+    #[test]
+    fn bignum_to_bytes_matches_into_vec() {
+        use crate::BigNum;
+        use super::Mpz;
+        for &v in &[0i64, 1, 127, 255, 256, 65535, 1_000_000] {
+            let n: Mpz = v.into();
+            assert_eq!(n.to_bytes(), Vec::<u8>::from(&n));
+        }
+    }
+
+    #[test]
+    fn bignum_to_bytes_roundtrip() {
+        use crate::BigNum;
+        use super::Mpz;
+        for &v in &[1u64, 127, 255, 256, 65535, 1_000_000, u64::MAX] {
+            let n: Mpz = v.into();
+            let bytes = n.to_bytes();
+            let back = Mpz::from(bytes.as_slice());
+            assert_eq!(n, back);
+        }
+    }
+
 }

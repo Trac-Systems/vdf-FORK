@@ -1,4 +1,5 @@
 // Copyright 2018 Chia Network Inc and POA Networks Ltd.
+// Modifications copyright 2026 Trac Systems.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,6 +47,7 @@ pub trait BigNum:
     fn probab_prime(&self, iterations: u32) -> bool;
     fn setbit(&mut self, offset: usize);
     fn mod_powm(&mut self, base: &Self, exponent: &Self, modulus: &Self);
+    fn to_bytes(&self) -> Vec<u8>;
 }
 
 pub trait BigNumExt: BigNum {
@@ -177,8 +179,8 @@ mod test {
         path::PathBuf,
     };
 
-    use super::{gmp_classgroup::GmpClassGroup, ClassGroup};
     use super::gmp::mpz::Mpz;
+    use super::{gmp_classgroup::GmpClassGroup, ClassGroup};
 
     fn split_into_three_pieces(line: &str, c: char) -> [&str; 3] {
         let mut iter = line.split(c);
@@ -225,9 +227,7 @@ mod test {
                     minuand *= &a * &c;
                     discriminant -= &minuand;
                     assert!(discriminant < Mpz::zero());
-                    // takes waaaay too long
-                    // assert!(discriminant.probab_prime(20) !=
-                    // gmp::mpz::ProbabPrimeResult::NotPrime);
+
                     if let Some(ref q) = current_discriminant {
                         assert_eq!(q, &discriminant, "mismatching discriminant in test files");
                     } else {
@@ -247,5 +247,4 @@ mod test {
             buffer.clear();
         }
     }
-
 }
