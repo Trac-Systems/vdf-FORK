@@ -89,7 +89,7 @@ extern "C" {
     fn __gmpz_import(rop: mpz_ptr, count: size_t, order: c_int, size: size_t,
                      endian: c_int, nails: size_t, op: *const c_void);
     fn __gmpz_export(rop: *mut c_void, countp: *mut size_t, order: c_int, size: size_t, 
-                     endian: c_int, nails: size_t, op: mpz_srcptr);
+                     endian: c_int, nails: size_t, op: mpz_srcptr) -> *mut c_void;
     fn __gmpz_root(rop: mpz_ptr, op: mpz_srcptr, n: c_ulong) -> c_int;
     fn __gmpz_sqrt(rop: mpz_ptr, op: mpz_srcptr);
     fn __gmpz_millerrabin(n: mpz_srcptr, reps: c_int) -> c_int;
@@ -795,7 +795,7 @@ impl<'b> From<&'b Mpz> for Vec<u8> {
             let bit_size = size_of::<u8>() * 8;
             let size = (__gmpz_sizeinbase(&other.mpz, 2) + bit_size - 1) / bit_size;
             let mut result: Vec<u8> = vec!(0; size);
-            __gmpz_export(result.as_mut_ptr() as *mut c_void, 0 as *mut size_t, 1, size_of::<u8>() as size_t, 0, 0, &other.mpz);
+            let _ = __gmpz_export(result.as_mut_ptr() as *mut c_void, 0 as *mut size_t, 1, size_of::<u8>() as size_t, 0, 0, &other.mpz);
             result
         }
     }
@@ -815,7 +815,7 @@ impl<'b> From<&'b Mpz> for Option<i64> {
 
             if __gmpz_sizeinbase(&to_export.mpz, 2) <= 63 {
                 let mut result : i64 = 0;
-                __gmpz_export(&mut result as *mut i64 as *mut c_void, 0 as *mut size_t, -1, size_of::<i64>() as size_t, 0, 0, &to_export.mpz);
+                let _ = __gmpz_export(&mut result as *mut i64 as *mut c_void, 0 as *mut size_t, -1, size_of::<i64>() as size_t, 0, 0, &to_export.mpz);
                 if negative {
                     Some(result ^ -1i64)
                 } else {
@@ -833,7 +833,7 @@ impl<'b> From<&'b Mpz> for Option<u64> {
         unsafe {
             if __gmpz_sizeinbase(&other.mpz, 2) <= 64 && other.mpz._mp_size >= 0 {
                 let mut result : u64 = 0;
-                __gmpz_export(&mut result as *mut u64 as *mut c_void, 0 as *mut size_t, -1, size_of::<u64>() as size_t, 0, 0, &other.mpz);
+                let _ = __gmpz_export(&mut result as *mut u64 as *mut c_void, 0 as *mut size_t, -1, size_of::<u64>() as size_t, 0, 0, &other.mpz);
                 Some(result)
             } else {
                 None
