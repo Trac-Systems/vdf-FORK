@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use super::classgroup::ClassGroup;
-use std::{collections::HashMap, usize};
+use std::collections::HashMap;
 use super::progress::{ProgressReporter, SolvePhase, REPORT_EVERY};
 
 pub fn serialize<V: ClassGroup>(proof: &[V], y: &V, int_size_bits: usize) -> Vec<u8> {

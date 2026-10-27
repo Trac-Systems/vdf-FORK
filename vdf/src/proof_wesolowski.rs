@@ -17,7 +17,7 @@ use super::proof_of_time::serialize;
 use super::progress::{ProgressReporter, SolvePhase, SolveProgress};
 use classgroup::{gmp_classgroup::GmpClassGroup, BigNum, BigNumExt, ClassGroup};
 use sha2::{digest::FixedOutput, Digest, Sha256};
-use std::{cmp::Eq, collections::HashMap, hash::Hash, mem, u64, usize};
+use std::{cmp::Eq, collections::HashMap, hash::Hash, mem};
 
 #[derive(Debug, Clone)]
 pub struct WesolowskiVDF {
