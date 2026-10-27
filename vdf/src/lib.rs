@@ -84,6 +84,7 @@ pub use self::{
     create_discriminant::create_discriminant,
     proof_pietrzak::{PietrzakVDF, PietrzakVDFParams},
     proof_wesolowski::{WesolowskiVDF, WesolowskiVDFParams},
+    progress::{SolvePhase, SolveProgress},
 };
 
 /// Message used to report an internal miscalculation of serialization buffer
@@ -94,6 +95,7 @@ const INCORRECT_BUFFER_SIZE: &str =
 mod proof_of_time;
 mod proof_pietrzak;
 mod proof_wesolowski;
+mod progress;
 
 /// An empty struct indicating verification failure.
 ///

@@ -32,6 +32,7 @@ use classgroup::BigNumExt;
 use num_traits::Zero;
 use sha2::{digest::FixedOutput, Digest, Sha256};
 use std::u16;
+use super::progress::{ProgressReporter, SolvePhase};
 
 fn random_bytes_from_seed(seed: &[u8], byte_count: usize) -> Vec<u8> {
     assert!(byte_count <= 32 * ((1 << 16) - 1));
@@ -63,6 +64,14 @@ fn random_bytes_from_seed(seed: &[u8], byte_count: usize) -> Vec<u8> {
 /// This function is guaranteed not to panic for any inputs whatsoever, unless
 /// memory allocation fails and the allocator in use panics in that case.
 pub fn create_discriminant<T: BigNumExt>(seed: &[u8], length: u16) -> T {
+    create_discriminant_with_progress(seed, length, &mut ProgressReporter::new(None))
+}
+
+pub(crate) fn create_discriminant_with_progress<T: BigNumExt>(
+    seed: &[u8],
+    length: u16,
+    progress: &mut ProgressReporter<'_>,
+) -> T {
     let (mut n, residue) = {
         // The number of “extra” bits (that don’t evenly fit in a byte)
         let extra: u8 = (length as u8) & 7;
@@ -106,18 +115,24 @@ pub fn create_discriminant<T: BigNumExt>(seed: &[u8], length: u16) -> T {
                 sieve.set(i, true);
                 i += p as usize;
             }
+            progress.advance(SolvePhase::DiscriminantSieve, 1);
         }
+        progress.flush(SolvePhase::DiscriminantSieve);
 
         for (i, x) in sieve.iter().enumerate() {
             if !x {
                 let q = u64::from(M) * u64::from(i as u32);
                 n = n + q;
-                if n.probab_prime(2) {
+                let is_prime = n.probab_prime(2);
+                progress.advance(SolvePhase::DiscriminantCandidates, 1);
+                if is_prime {
+                    progress.flush(SolvePhase::DiscriminantCandidates);
                     return -n;
                 }
                 n = n - q;
             }
         }
+        progress.flush(SolvePhase::DiscriminantCandidates);
         // M is set to a number with many prime factors so the results are
         // more uniform https://eprint.iacr.org/2011/481.pdf
         // TODO:  Explain previous reference to https://eprint.iacr.org/2011/401.pdf
