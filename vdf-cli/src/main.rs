@@ -17,7 +17,7 @@ use hex;
 #[macro_use]
 extern crate clap;
 
-use std::{cell::RefCell, fs::File, io::Read, rc::Rc, u64};
+use std::{cell::RefCell, fs::File, io::Read, rc::Rc};
 use vdf::{InvalidProof, PietrzakVDFParams, VDFParams, WesolowskiVDFParams, VDF};
 
 macro_rules! gen_validator {

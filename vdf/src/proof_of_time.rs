@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use super::classgroup::ClassGroup;
-use std::{collections::HashMap, usize};
+use std::collections::HashMap;
+use super::progress::{ProgressReporter, SolvePhase, REPORT_EVERY};
 
 pub fn serialize<V: ClassGroup>(proof: &[V], y: &V, int_size_bits: usize) -> Vec<u8> {
     let proof_len = proof.len();
@@ -68,7 +69,21 @@ where
     Ok(v)
 }
 
-pub fn iterate_squarings<V, U>(mut x: V, powers_to_calculate: U) -> HashMap<u64, V>
+pub fn iterate_squarings<V, U>(x: V, powers_to_calculate: U) -> HashMap<u64, V>
+where
+    V: ClassGroup,
+    for<'a, 'b> &'a V: std::ops::Mul<&'b V, Output = V>,
+    for<'a, 'b> &'a V::BigNum: std::ops::Mul<&'b V::BigNum, Output = V::BigNum>,
+    U: Iterator<Item = u64>,
+{
+    iterate_squarings_with_progress(x, powers_to_calculate, &mut ProgressReporter::new(None))
+}
+
+pub(crate) fn iterate_squarings_with_progress<V, U>(
+    mut x: V,
+    powers_to_calculate: U,
+    progress: &mut ProgressReporter<'_>,
+) -> HashMap<u64, V>
 where
     V: ClassGroup,
     for<'a, 'b> &'a V: std::ops::Mul<&'b V, Output = V>,
@@ -80,9 +95,20 @@ where
     powers_to_calculate.sort_unstable();
     let mut previous_power: u64 = 0;
     for &current_power in &powers_to_calculate {
-        x.repeated_square(current_power - previous_power);
+        let mut remaining = current_power - previous_power;
+        if progress.enabled() {
+            while remaining > 0 {
+                let batch = remaining.min(REPORT_EVERY);
+                x.repeated_square(batch);
+                progress.advance(SolvePhase::Squaring, batch);
+                remaining -= batch;
+            }
+        } else {
+            x.repeated_square(remaining);
+        }
         powers_calculated.insert(current_power, x.clone());
         previous_power = current_power
     }
+    progress.flush(SolvePhase::Squaring);
     powers_calculated
 }

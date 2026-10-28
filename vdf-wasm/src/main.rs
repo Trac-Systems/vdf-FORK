@@ -19,7 +19,25 @@ use std::{
     slice,
     sync::{Mutex, OnceLock},
 };
-use vdf::{VDFParams, WesolowskiVDFParams, VDF};
+use vdf::{SolveProgress, VDFParams, WesolowskiVDFParams, VDF};
+
+#[cfg(target_os = "emscripten")]
+extern "C" {
+    fn vdf_report_progress(phase: u32, completed_lo: u32, completed_hi: u32);
+}
+
+fn report_progress(progress: SolveProgress) {
+    #[cfg(target_os = "emscripten")]
+    unsafe {
+        vdf_report_progress(
+            progress.phase as u32,
+            progress.completed as u32,
+            (progress.completed >> 32) as u32,
+        );
+    }
+    #[cfg(not(target_os = "emscripten"))]
+    let _ = progress;
+}
 
 static LAST_RESULT: OnceLock<Mutex<Vec<u8>>> = OnceLock::new();
 static LAST_ERROR: OnceLock<Mutex<Vec<u8>>> = OnceLock::new();
@@ -122,6 +140,32 @@ pub unsafe extern "C" fn vdf_solve_wesolowski(
     difficulty_hi: u32,
     discriminant_size_bits: u32,
 ) -> i32 {
+    solve_wesolowski(
+        challenge_ptr, challenge_len, difficulty_lo, difficulty_hi, discriminant_size_bits, false,
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vdf_solve_wesolowski_with_progress(
+    challenge_ptr: *const u8,
+    challenge_len: usize,
+    difficulty_lo: u32,
+    difficulty_hi: u32,
+    discriminant_size_bits: u32,
+) -> i32 {
+    solve_wesolowski(
+        challenge_ptr, challenge_len, difficulty_lo, difficulty_hi, discriminant_size_bits, true,
+    )
+}
+
+unsafe fn solve_wesolowski(
+    challenge_ptr: *const u8,
+    challenge_len: usize,
+    difficulty_lo: u32,
+    difficulty_hi: u32,
+    discriminant_size_bits: u32,
+    observe: bool,
+) -> i32 {
     clear_error();
     let challenge = match read_input(challenge_ptr, challenge_len, "challenge") {
         Ok(challenge) => challenge,
@@ -131,10 +175,14 @@ pub unsafe extern "C" fn vdf_solve_wesolowski(
         Ok(bits) => bits,
         Err(code) => return code,
     };
-    match WesolowskiVDFParams(bits)
-        .new()
-        .solve(challenge, difficulty(difficulty_lo, difficulty_hi))
-    {
+    let solver = WesolowskiVDFParams(bits).new();
+    let iterations = difficulty(difficulty_lo, difficulty_hi);
+    let result = if observe {
+        solver.solve_with_progress(challenge, iterations, &mut report_progress)
+    } else {
+        solver.solve(challenge, iterations)
+    };
+    match result {
         Ok(proof) => {
             write_result(proof);
             0
