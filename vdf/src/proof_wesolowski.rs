@@ -221,7 +221,9 @@ where
             if t < k as usize * (i * l + j + 1) {
                 continue;
             }
-            let b = get_block((i as u64) * (l as u64), k, t as _, b);
+            // Cached powers supply 2^(k*i*l) the outer Horner loop supplies
+            // 2^(k*j). Select the corresponding digit at index i*l+j.
+            let b = get_block((i as u64) * (l as u64) + j as u64, k, t as _, b);
             *ys.get_mut(&b).unwrap() *= &powers[&((i * kl) as _)];
             progress.advance(SolvePhase::ProofBlocks, 1);
         }
@@ -410,8 +412,12 @@ where
 }
 
 #[cfg(test)]
+mod large_difficulty_tests;
+
+#[cfg(test)]
 mod test {
     use super::*;
+    use crate::{VDFParams, VDF};
     use classgroup::{gmp_classgroup::GmpClassGroup, ClassGroup};
 
     type G = GmpClassGroup;
@@ -431,6 +437,83 @@ mod test {
                 .map(|i| (i * q) as u64)
                 .chain(Some(iterations)),
         )
+    }
+
+    fn check_forced_parameters(l: usize, block_sizes: &[u8]) {
+        // All T values exceed the 128-bit Fiat-Shamir prime's size, so the
+        // expected proof exponent is nonzero. Cover complete and partial k*L
+        // groups, odd/even k, several discriminants, and the production k=11.
+        for challenge in [b"large-l-a".as_ref(), b"large-l-b", b"large-l-c"] {
+            let size_bits = 512;
+            let x = generator(challenge, size_bits);
+            for iterations in [256u64, 257, 511] {
+                for &k in block_sizes {
+                    let stride = u64::from(k) * l as u64;
+                    let powers = super::super::proof_of_time::iterate_squarings(
+                        x.clone(),
+                        (0..=iterations / stride + 1)
+                            .map(|i| i * stride)
+                            .chain(Some(iterations)),
+                    );
+                    let y = &powers[&iterations];
+                    let mut y_bytes = vec![0; 2 * ((size_bits as usize + 16) >> 4)];
+                    y.serialize(&mut y_bytes).unwrap();
+                    let b: Num = hash_prime(&[
+                        challenge,
+                        &u16_to_bytes(size_bits),
+                        &u64_to_bytes(iterations),
+                        &y_bytes,
+                        &x.discriminant().to_bytes(),
+                    ]);
+                    // Independent arithmetic oracle: no block extraction or
+                    // optimized evaluator is used to compute floor(2^T / B).
+                    let quotient = (Num::from(1u64) << iterations as usize) / &b;
+                    let mut expected = x.clone();
+                    expected.pow(quotient);
+                    assert_ne!(expected, x.identity(), "regression must use a nontrivial proof");
+                    let proof = generate_proof(&x, challenge, iterations, size_bits, k, l, &powers);
+                    assert!(
+                        verify_proof(challenge, x.clone(), y, proof.clone(), iterations, size_bits).is_ok(),
+                        "invalid generated proof: L={}, k={}, T={}, challenge={:?}", l, k, iterations, challenge
+                    );
+                    assert_eq!(proof, expected, "wrong quotient exponent: L={l}, k={k}, T={iterations}, challenge={challenge:?}");
+                    let encoded = serialize(&[proof.clone()], y, size_bits as usize);
+                    assert!(WesolowskiVDFParams(size_bits).new().verify(challenge, iterations, &encoded).is_ok());
+
+                    let mut reports = Vec::new();
+                    let mut observe = |event| reports.push(event);
+                    let observed = generate_proof_with_progress(
+                        &x, challenge, iterations, size_bits, k, l, &powers,
+                        &mut ProgressReporter::new(Some(&mut observe)),
+                    );
+                    assert_eq!(observed, proof, "progress must not change the proof");
+                    assert!(reports.iter().any(|event| event.phase == SolvePhase::ProofBlocks));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn forced_l_1_matches_exact_quotient_and_verifies() {
+        check_forced_parameters(1, &[3, 4, 11, 13]);
+    }
+
+    #[test]
+    fn forced_l_2_matches_exact_quotient_and_verifies() {
+        check_forced_parameters(2, &[3, 4, 11]);
+    }
+
+    #[test]
+    fn forced_l_10_matches_exact_quotient_and_verifies() {
+        check_forced_parameters(10, &[3, 4, 10, 11, 12]);
+    }
+
+    #[test]
+    fn memory_parameter_boundary_keeps_production_policy() {
+        for &(iterations, expected_l, expected_k) in super::large_difficulty_tests::CASES {
+            let (l, k, _) = approximate_parameters(iterations as f64);
+            assert_eq!((l, k), (expected_l, expected_k), "T={iterations}");
+        }
     }
 
     // Smoke test: generate_proof + verify_proof agree when the same discriminant
